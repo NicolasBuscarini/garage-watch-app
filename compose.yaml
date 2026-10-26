@@ -1,0 +1,43 @@
+services:
+  capture:
+    build: .
+    restart: unless-stopped
+    init: true
+    user: "${APP_UID:?set APP_UID}:${APP_GID:?set APP_GID}"
+    environment:
+      HOST_DATA_DIR: /data
+      CAMERA_DEVICE_PATH: "${CAMERA_DEVICE_PATH:?set CAMERA_DEVICE_PATH}"
+      CAMERA_ID: "${CAMERA_ID:?set CAMERA_ID}"
+      FRAME_WIDTH: "${FRAME_WIDTH:?set FRAME_WIDTH}"
+      FRAME_HEIGHT: "${FRAME_HEIGHT:?set FRAME_HEIGHT}"
+      FRAME_RATE: "${FRAME_RATE:?set FRAME_RATE}"
+      SEGMENT_SECONDS: "${SEGMENT_SECONDS:?set SEGMENT_SECONDS}"
+      BUFFER_SECONDS: "${BUFFER_SECONDS:?set BUFFER_SECONDS}"
+      PRE_EVENT_SECONDS: "${PRE_EVENT_SECONDS:?set PRE_EVENT_SECONDS}"
+      POST_EVENT_SECONDS: "${POST_EVENT_SECONDS:?set POST_EVENT_SECONDS}"
+      STORAGE_QUOTA_BYTES: "${STORAGE_QUOTA_BYTES:?set STORAGE_QUOTA_BYTES}"
+      MIN_FREE_BYTES: "${MIN_FREE_BYTES:?set MIN_FREE_BYTES}"
+      CAPTURE_RETRY_SECONDS: "${CAPTURE_RETRY_SECONDS:?set CAPTURE_RETRY_SECONDS}"
+      MAX_PENDING_CLIPS: "${MAX_PENDING_CLIPS:?set MAX_PENDING_CLIPS}"
+      MAX_CLIP_BYTES: "${MAX_CLIP_BYTES:?set MAX_CLIP_BYTES}"
+    devices:
+      - "${CAMERA_DEVICE_PATH:?set CAMERA_DEVICE_PATH}:${CAMERA_DEVICE_PATH:?set CAMERA_DEVICE_PATH}:rwm"
+    group_add:
+      - "${VIDEO_GID:?set VIDEO_GID}"
+    volumes:
+      - "${HOST_DATA_DIR:?set HOST_DATA_DIR}:/data"
+    ports:
+      - "127.0.0.1:${APP_PORT:?set APP_PORT}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - capture_local
+
+networks:
+  capture_local:
+    internal: true
