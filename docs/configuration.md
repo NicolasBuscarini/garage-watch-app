@@ -10,6 +10,7 @@ Toda configuração do serviço é injetada por variáveis de ambiente. `.env.ex
 | `HOST_DATA_DIR` | Pasta no SSD do host montada como `/data` no container |
 | `CAMERA_DEVICE_PATH` | Dispositivo local de vídeo, por exemplo `/dev/video0`; confirmar acesso/permissão no próprio host |
 | `CAMERA_ID` | Identificador estável da câmera no armazenamento e métricas |
+| `RECORD_AUDIO` | `false` mantém captura somente de vídeo. `true` é recusado até existir adaptador para o microfone da câmera; não usar o microfone do notebook como substituto |
 | `FRAME_WIDTH`, `FRAME_HEIGHT`, `FRAME_RATE` | Formato solicitado ao adaptador OpenCV; dimensões aceitas até 4096×2160 e 1–60 fps; o dispositivo pode negociar valores diferentes |
 | `SEGMENT_SECONDS` | Duração-alvo dos segmentos, maior que zero e até 60 segundos |
 | `BUFFER_SECONDS` | Janela de segmentos mantida circularmente (1–3600 s), exceto segmentos fixados por jobs pendentes |
@@ -21,3 +22,5 @@ Toda configuração do serviço é injetada por variáveis de ambiente. `.env.ex
 | `CAPTURE_RETRY_SECONDS` | Intervalo de retry (até 60 s) após falha de abertura/leitura da webcam |
 
 Não use endereços RTSP ou credenciais nesta versão: o adaptador RTSP ainda não existe.
+
+Os segmentos AVI/MJPEG atuais não carregam áudio. O host observado expõe apenas o microfone analógico do notebook, que permanece deliberadamente fora do container para não gravar som ambiente. Quando houver câmera com microfone, a captura exigirá adaptador de áudio, dispositivo/permissões explícitos, mux de mídia, limites de disco e testes de sincronização antes de `RECORD_AUDIO=true` ser suportado.

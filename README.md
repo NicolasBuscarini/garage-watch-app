@@ -4,9 +4,10 @@ Protótipo local T00a de captura para Garagem IA. O protótipo existe para valid
 
 ## Estado
 
-- Dispositivos locais `/dev/video0` e `/dev/video1` encontrados; webcam implementada, mas ainda não aberta/testada nem homologada.
+- Dispositivos locais `/dev/video0` e `/dev/video1` encontrados; `/dev/video0` foi aberto e entregou frames no health local, sem homologação de imagem ou desempenho.
 - Fonte sintética: destinada a testes locais, não representa câmera real.
 - Gravação no SSD local com quota/checksum; nenhuma integração NAS.
+- `RECORD_AUDIO=false`: segmentos AVI/MJPEG são somente vídeo. O protótipo não acessa o microfone do notebook; áudio aguarda câmera com microfone e adaptador próprio.
 - T00/T01 continuam pendentes e T02 permanece bloqueada.
 
 O escopo e os critérios compartilhados estão em `../../docs/governanca/10_BACKLOG.md`, tarefa T00a, e nas decisões/arquitetura em `../../docs/`.

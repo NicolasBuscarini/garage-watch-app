@@ -32,6 +32,7 @@ def settings(tmp_path, **overrides):
         retry_seconds=0.1,
         max_pending_clips=5,
         max_clip_bytes=10_000_000,
+        record_audio=False,
     )
     values.update(overrides)
     return Settings(**values)
@@ -53,6 +54,7 @@ def test_synthetic_source_manual_clip_api_and_metrics(tmp_path, monkeypatch):
         capture_status = client.get("/api/v1/status").json()
         assert capture_status["frames_received"] > 0, capture_status
         assert capture_status["buffer_segments"] >= 2, capture_status
+        assert capture_status["record_audio"] is False
         assert client.get("/health/ready").status_code == 200
         requested = client.post("/api/v1/clips")
         assert requested.status_code == 202
@@ -253,8 +255,22 @@ def test_invalid_configuration_is_rejected(tmp_path, monkeypatch):
         "SEGMENT_SECONDS": "2", "BUFFER_SECONDS": "10", "PRE_EVENT_SECONDS": "30",
         "POST_EVENT_SECONDS": "20", "STORAGE_QUOTA_BYTES": "1000000", "MIN_FREE_BYTES": "1000",
         "CAPTURE_RETRY_SECONDS": "1", "MAX_PENDING_CLIPS": "5",
-        "MAX_CLIP_BYTES": "100000",
+        "MAX_CLIP_BYTES": "100000", "RECORD_AUDIO": "false",
     }.items():
         monkeypatch.setenv(key, value)
     with pytest.raises(ValueError, match="BUFFER_SECONDS"):
+        Settings.from_env()
+
+
+def test_audio_recording_is_rejected_until_camera_adapter_exists(tmp_path, monkeypatch):
+    for key, value in {
+        "HOST_DATA_DIR": str(tmp_path), "CAMERA_DEVICE_PATH": "/dev/video0", "CAMERA_ID": "garage",
+        "FRAME_WIDTH": "640", "FRAME_HEIGHT": "480", "FRAME_RATE": "10",
+        "SEGMENT_SECONDS": "2", "BUFFER_SECONDS": "30", "PRE_EVENT_SECONDS": "10",
+        "POST_EVENT_SECONDS": "20", "STORAGE_QUOTA_BYTES": "1000000", "MIN_FREE_BYTES": "1000",
+        "CAPTURE_RETRY_SECONDS": "1", "MAX_PENDING_CLIPS": "5", "MAX_CLIP_BYTES": "100000",
+        "RECORD_AUDIO": "true",
+    }.items():
+        monkeypatch.setenv(key, value)
+    with pytest.raises(ValueError, match="adaptador de áudio"):
         Settings.from_env()

@@ -242,6 +242,7 @@ class CaptureRuntime:
             "buffer_segments": len(self.buffer.segments),
             "discarded_segments": self.buffer.discarded_segments_total,
             "source_connected": self.source_connected,
+            "record_audio": self.settings.record_audio,
             "buffer_window": [
                 {"started_at": iso_utc(segment.started_at), "ended_at": iso_utc(segment.ended_at)}
                 for segment in self.buffer.segments[-3:]

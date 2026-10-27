@@ -21,6 +21,7 @@ class Settings:
     retry_seconds: float
     max_pending_clips: int
     max_clip_bytes: int
+    record_audio: bool
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -29,6 +30,12 @@ class Settings:
             if value is None or value == "":
                 raise ValueError(f"variável obrigatória ausente: {name}")
             return value
+
+        def boolean(name: str) -> bool:
+            value = required(name).strip().lower()
+            if value not in {"true", "false"}:
+                raise ValueError(f"{name} deve ser true ou false")
+            return value == "true"
 
         settings = cls(
             data_dir=Path(required("HOST_DATA_DIR")),
@@ -46,6 +53,7 @@ class Settings:
             retry_seconds=float(required("CAPTURE_RETRY_SECONDS")),
             max_pending_clips=int(required("MAX_PENDING_CLIPS")),
             max_clip_bytes=int(required("MAX_CLIP_BYTES")),
+            record_audio=boolean("RECORD_AUDIO"),
         )
         if (settings.width < 1 or settings.width > 4096 or settings.height < 1 or settings.height > 2160 or
                 not math.isfinite(settings.fps) or settings.fps <= 0 or settings.fps > 60 or
@@ -63,4 +71,6 @@ class Settings:
             raise ValueError("configuração de captura inválida")
         if settings.pre_event_seconds > settings.buffer_seconds:
             raise ValueError("PRE_EVENT_SECONDS deve caber em BUFFER_SECONDS")
+        if settings.record_audio:
+            raise ValueError("RECORD_AUDIO=true requer um adaptador de áudio da câmera, ainda indisponível")
         return settings
