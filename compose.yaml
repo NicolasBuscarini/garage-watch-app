@@ -40,4 +40,4 @@ services:
 
 networks:
   capture_local:
-    internal: true
+    driver: bridge

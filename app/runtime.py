@@ -136,6 +136,13 @@ class CaptureRuntime:
                     if utc_now() < job.window_end:
                         continue
                     with self.lock:
+                        latest_frame_at = self.buffer.current_ended
+                        if latest_frame_at is None and self.buffer.segments:
+                            latest_frame_at = self.buffer.segments[-1].ended_at
+                        # Keep collecting while a healthy source has not supplied the
+                        # requested post-event window; an unavailable source is incomplete.
+                        if self.source_connected and (latest_frame_at is None or latest_frame_at < job.window_end):
+                            continue
                         self.buffer.close_segment()
                         segments = [segment for segment in self.buffer.segments
                                     if segment.ended_at >= job.window_start and segment.started_at <= job.window_end]
