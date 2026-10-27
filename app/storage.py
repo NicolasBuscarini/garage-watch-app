@@ -143,12 +143,12 @@ class LocalArchive:
 
 class SegmentBuffer:
     def __init__(self, root: Path, camera_id: str, stream_epoch: str,
-                 fps: float, segment_seconds: float, buffer_seconds: int,
+                 fps: float, segment_seconds: float, retention_seconds: int,
                  archive: LocalArchive, min_free_bytes: int, on_discard=None, on_gap=None):
         self.root = root / "segments"
         self.root.mkdir(parents=True, exist_ok=True)
         self.camera_id, self.stream_epoch = camera_id, stream_epoch
-        self.fps, self.segment_seconds, self.buffer_seconds = fps, segment_seconds, buffer_seconds
+        self.fps, self.segment_seconds, self.retention_seconds = fps, segment_seconds, retention_seconds
         self.archive, self.min_free_bytes = archive, min_free_bytes
         self.on_discard = on_discard or (lambda: None)
         self.on_gap = on_gap or (lambda: None)
@@ -162,6 +162,7 @@ class SegmentBuffer:
         self.discarded_segments_total = 0
         self._quota_gap_start = None
         self._recover()
+        self._prune(utc_now())
 
     def _recover(self) -> None:
         for path in self.root.glob("*.tmp"):
@@ -205,7 +206,7 @@ class SegmentBuffer:
         return False
 
     def _prune(self, now) -> None:
-        keep_after = now.timestamp() - self.buffer_seconds
+        keep_after = now.timestamp() - self.retention_seconds
         retained = []
         for segment in self.segments:
             if segment.ended_at.timestamp() < keep_after and not self._pinned(segment):

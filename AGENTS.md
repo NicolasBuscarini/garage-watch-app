@@ -10,6 +10,7 @@
 - Manter um serviço Python modular, configuração somente por variáveis de ambiente injetadas pelo Docker Compose e dependências/imagens fixadas.
 - Não versionar `.env`, credenciais, mídia pessoal ou artefatos. Usar somente mídia sintética nos testes automatizados.
 - Limitar filas e disco; nunca descartar segmentos referenciados ou clipes pendentes silenciosamente. Persistir identidade, UTC, lacunas e checksum; reconexão cria novo `stream_epoch`; recuperar parciais no reinício.
+- `SEGMENT_RETENTION_SECONDS` expurga segmentos não protegidos, inclusive legados válidos no startup. O valor deve comportar a janela pré-evento e um segmento; não apagar mídia referenciada por job `collecting`.
 - Testes devem cobrir fluxo real interno e fronteiras com fonte sintética contratual, incluindo falhas de cota e recuperação. Separar evidência automatizada de teste em equipamento físico.
 - Atualizar este README e `docs/` locais conforme comportamento/configuração; mudanças de arquitetura exigem registrar alinhamento no contexto compartilhado.
 

@@ -26,7 +26,7 @@ class CaptureRuntime:
         self.stream_epoch = uuid.uuid4().hex
         self.metrics = Metrics(settings.data_dir)
         self.buffer = SegmentBuffer(settings.data_dir, settings.camera_id, self.stream_epoch,
-                                    settings.fps, settings.segment_seconds, settings.buffer_seconds,
+                                    settings.fps, settings.segment_seconds, settings.segment_retention_seconds,
                                     self.archive, settings.min_free_bytes,
                                     on_discard=lambda: self.metrics.increment("discarded_segments_total"),
                                     on_gap=lambda: self.metrics.increment("gaps_total"))
@@ -239,6 +239,7 @@ class CaptureRuntime:
             "gaps": self.metrics.values.gaps_total,
             "storage_bytes": self.archive.used_bytes(),
             "storage_quota_bytes": self.settings.quota_bytes,
+            "segment_retention_seconds": self.settings.segment_retention_seconds,
             "buffer_segments": len(self.buffer.segments),
             "discarded_segments": self.buffer.discarded_segments_total,
             "source_connected": self.source_connected,

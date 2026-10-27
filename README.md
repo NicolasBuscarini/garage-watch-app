@@ -7,6 +7,7 @@ Protótipo local T00a de captura para Garagem IA. O protótipo existe para valid
 - Dispositivos locais `/dev/video0` e `/dev/video1` encontrados; `/dev/video0` foi aberto e entregou frames no health local, sem homologação de imagem ou desempenho.
 - Fonte sintética: destinada a testes locais, não representa câmera real.
 - Gravação no SSD local com quota/checksum; nenhuma integração NAS.
+- `SEGMENT_RETENTION_SECONDS=15` remove segmentos não protegidos após 15 s; reduza `PRE_EVENT_SECONDS` se escolher uma retenção menor.
 - `RECORD_AUDIO=false`: segmentos AVI/MJPEG são somente vídeo. O protótipo não acessa o microfone do notebook; áudio aguarda câmera com microfone e adaptador próprio.
 - T00/T01 continuam pendentes e T02 permanece bloqueada.
 
@@ -21,6 +22,6 @@ O escopo e os critérios compartilhados estão em `../../docs/governanca/10_BACK
 
 O serviço exige uma webcam acessível pelo container para ficar pronto. Testes automatizados usam `SyntheticSource` e não abrem o dispositivo. Para executar os testes sem câmera: `docker compose --env-file .env.example build`, depois `docker run --rm --user 0 -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/app -v "$PWD:/app:ro" -w /app --entrypoint python garage-watch-capture -m pytest -p no:cacheprovider`.
 
-`POST /api/v1/clips` cria job durável e responde imediatamente; o clipe aparece após a janela pós-evento configurada. Clipes/segmentos são AVI/MJPEG neste experimento. O endpoint local ainda não tem autenticação e não deve ser publicado na LAN ou internet.
+`POST /api/v1/clips` cria job durável e responde imediatamente; o clipe aparece após a janela pós-evento configurada. Clipes/segmentos são AVI/MJPEG neste experimento. Segmentos legados válidos são expurgados na inicialização conforme `SEGMENT_RETENTION_SECONDS`, exceto os protegidos por jobs pendentes. O endpoint local ainda não tem autenticação e não deve ser publicado na LAN ou internet.
 
 Descrição das variáveis obrigatórias e limites: [`docs/configuration.md`](docs/configuration.md). Desenho e limitações: [`docs/architecture.md`](docs/architecture.md).

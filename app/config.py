@@ -13,7 +13,7 @@ class Settings:
     height: int
     fps: float
     segment_seconds: float
-    buffer_seconds: int
+    segment_retention_seconds: int
     pre_event_seconds: int
     post_event_seconds: int
     quota_bytes: int
@@ -45,7 +45,7 @@ class Settings:
             height=int(required("FRAME_HEIGHT")),
             fps=float(required("FRAME_RATE")),
             segment_seconds=float(required("SEGMENT_SECONDS")),
-            buffer_seconds=int(required("BUFFER_SECONDS")),
+            segment_retention_seconds=int(required("SEGMENT_RETENTION_SECONDS")),
             pre_event_seconds=int(required("PRE_EVENT_SECONDS")),
             post_event_seconds=int(required("POST_EVENT_SECONDS")),
             quota_bytes=int(required("STORAGE_QUOTA_BYTES")),
@@ -59,7 +59,7 @@ class Settings:
                 not math.isfinite(settings.fps) or settings.fps <= 0 or settings.fps > 60 or
                 not math.isfinite(settings.segment_seconds) or settings.segment_seconds <= 0 or
                 settings.segment_seconds > 60 or
-                settings.buffer_seconds < 1 or settings.buffer_seconds > 3600 or
+                settings.segment_retention_seconds < 1 or settings.segment_retention_seconds > 3600 or
                 settings.pre_event_seconds < 0 or settings.post_event_seconds < 0 or
                 settings.pre_event_seconds + settings.post_event_seconds > 600 or
                 settings.quota_bytes < 1 or settings.min_free_bytes < 0 or
@@ -69,8 +69,8 @@ class Settings:
                 settings.max_clip_bytes < 1 or settings.max_clip_bytes > settings.quota_bytes or
                 not settings.camera_id.strip()):
             raise ValueError("configuração de captura inválida")
-        if settings.pre_event_seconds > settings.buffer_seconds:
-            raise ValueError("PRE_EVENT_SECONDS deve caber em BUFFER_SECONDS")
+        if settings.pre_event_seconds + math.ceil(settings.segment_seconds) > settings.segment_retention_seconds:
+            raise ValueError("PRE_EVENT_SECONDS mais SEGMENT_SECONDS deve caber em SEGMENT_RETENTION_SECONDS")
         if settings.record_audio:
             raise ValueError("RECORD_AUDIO=true requer um adaptador de áudio da câmera, ainda indisponível")
         return settings
