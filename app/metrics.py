@@ -9,6 +9,7 @@ import psutil
 class CaptureMetrics:
     frames_received: int = 0
     gaps_total: int = 0
+    source_reconnections_total: int = 0
     clips_total: int = 0
     discarded_segments_total: int = 0
     last_frame_age_seconds: float = 0

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import fcntl
 import shutil
 import threading
 import time
@@ -21,6 +22,8 @@ class CaptureRuntime:
     def __init__(self, settings: Settings, source: VideoSource):
         self.settings = settings
         self.source = source
+        self._data_lock = None
+        self._acquire_data_lock()
         self.archive = LocalArchive(settings.data_dir, settings.quota_bytes)
         self.recovered_clips = self.archive.recover()
         self.stream_epoch = uuid.uuid4().hex
@@ -34,10 +37,29 @@ class CaptureRuntime:
         self.stop_event = threading.Event()
         self.capture_thread: threading.Thread | None = None
         self.clip_thread: threading.Thread | None = None
+        self.stop_finalizer: threading.Thread | None = None
         self.lock = threading.RLock()
+        self.shutdown_lock = threading.Lock()
         self.gap_start: datetime | None = None
         self.started = False
         self.source_connected = False
+
+    def _acquire_data_lock(self) -> None:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True)
+        lock = (self.settings.data_dir / ".capture.lock").open("a+", encoding="utf-8")
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            lock.close()
+            raise RuntimeError("captura já está em execução para este diretório de dados")
+        self._data_lock = lock
+
+    def _release_data_lock(self) -> None:
+        if self._data_lock is None:
+            return
+        fcntl.flock(self._data_lock.fileno(), fcntl.LOCK_UN)
+        self._data_lock.close()
+        self._data_lock = None
 
     def start(self) -> None:
         if self.started:
@@ -55,17 +77,44 @@ class CaptureRuntime:
             self.capture_thread.join(timeout=5)
         if self.clip_thread:
             self.clip_thread.join(timeout=5)
-        with self.lock:
-            self.buffer.close_segment()
-        if self.gap_start is not None:
-            self._persist_gap(self.gap_start, utc_now(), "source_unavailable")
-            self.gap_start = None
-        self.started = False
+        if any(thread and thread.is_alive() for thread in (self.capture_thread, self.clip_thread)):
+            # A thread may still own an AVI temporary file; retain the data lock until it exits.
+            if self.stop_finalizer is None or not self.stop_finalizer.is_alive():
+                self.stop_finalizer = threading.Thread(target=self._finish_stop,
+                                                        name="capture-stop-finalizer", daemon=True)
+                self.stop_finalizer.start()
+            return
+
+        self._finalize_stop()
+
+    def _finish_stop(self) -> None:
+        if self.capture_thread:
+            self.capture_thread.join()
+        if self.clip_thread:
+            self.clip_thread.join()
+        self._finalize_stop()
+
+    def _finalize_stop(self) -> None:
+        with self.shutdown_lock:
+            if self._data_lock is None or any(
+                    thread and thread.is_alive() for thread in (self.capture_thread, self.clip_thread)):
+                return
+            with self.lock:
+                self.buffer.close_segment()
+            if self.gap_start is not None:
+                self._persist_gap(self.gap_start, utc_now(), "source_unavailable")
+                self.gap_start = None
+            self.started = False
+            self._release_data_lock()
 
     def _capture_loop(self) -> None:
+        connected_before = False
         while not self.stop_event.is_set():
             try:
                 self.source.open()
+                if connected_before:
+                    self.metrics.increment("source_reconnections_total")
+                connected_before = True
                 self.source_connected = True
                 while not self.stop_event.is_set():
                     frame = self.source.read()
@@ -77,7 +126,7 @@ class CaptureRuntime:
                             self.buffer.close_segment()
                         self.source.close()
                         self.source_connected = False
-                        time.sleep(self.settings.retry_seconds)
+                        self.stop_event.wait(self.settings.retry_seconds)
                         break
                     if self.gap_start is not None:
                         self._persist_gap(self.gap_start, frame.captured_at, "source_unavailable")
@@ -139,9 +188,10 @@ class CaptureRuntime:
                         latest_frame_at = self.buffer.current_ended
                         if latest_frame_at is None and self.buffer.segments:
                             latest_frame_at = self.buffer.segments[-1].ended_at
-                        # Keep collecting while a healthy source has not supplied the
-                        # requested post-event window; an unavailable source is incomplete.
-                        if self.source_connected and (latest_frame_at is None or latest_frame_at < job.window_end):
+                        # Require a frame after the boundary so a healthy source does not
+                        # close the clip on a scheduling-sensitive final frame.
+                        required_post_frame = job.window_end + timedelta(seconds=1 / self.settings.fps)
+                        if self.source_connected and (latest_frame_at is None or latest_frame_at < required_post_frame):
                             continue
                         self.buffer.close_segment()
                         segments = [segment for segment in self.buffer.segments
@@ -237,6 +287,7 @@ class CaptureRuntime:
             "source": type(self.source).__name__,
             "frames_received": self.metrics.values.frames_received,
             "gaps": self.metrics.values.gaps_total,
+            "source_reconnections": self.metrics.values.source_reconnections_total,
             "storage_bytes": self.archive.used_bytes(),
             "storage_quota_bytes": self.settings.quota_bytes,
             "segment_retention_seconds": self.settings.segment_retention_seconds,

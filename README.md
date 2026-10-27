@@ -24,4 +24,24 @@ O serviço exige uma webcam acessível pelo container para ficar pronto. Testes 
 
 `POST /api/v1/clips` cria job durável e responde imediatamente; o clipe aparece após a janela pós-evento configurada. Clipes/segmentos são AVI/MJPEG neste experimento. Segmentos legados válidos são expurgados na inicialização conforme `SEGMENT_RETENTION_SECONDS`, exceto os protegidos por jobs pendentes. O endpoint local ainda não tem autenticação e não deve ser publicado na LAN ou internet.
 
+## Laboratório de captura
+
+O laboratório executa a mesma captura do serviço por uma duração limitada e produz um relatório JSON local com formato solicitado/observado, frames, FPS observado, lacunas, reconexões, segmentos, descarte, CPU do processo, pico de RSS e bytes locais. Ele não envia mídia, não registra caminho/dispositivo da câmera e não inclui URL ou credenciais.
+
+Use primeiro a fonte contratual, sem webcam:
+
+```bash
+docker compose run --rm capture python -m app.capture_lab --duration-seconds 60 --source synthetic
+```
+
+Para exercitar reconexão determinística no ensaio sintético:
+
+```bash
+docker compose run --rm capture python -m app.capture_lab --duration-seconds 60 --source synthetic --synthetic-fail-after-frames 10 --synthetic-failures 2
+```
+
+Depois de conferir permissões e enquadramento, a webcam local pode ser medida com `--source camera`. Pare o serviço `capture` antes de iniciar o laboratório: o diretório de dados aceita somente uma captura por vez para proteger segmentos, clipes e temporários. O processo retorna código diferente de zero se não receber frames. Relatórios concluídos ficam em `data/reports/`; no máximo os 20 mais recentes são preservados e, se a cota não comportar o relatório, ele ainda é emitido no stdout com `report_file: null` sem apagar relatórios existentes.
+
+O ensaio sintético não homologa câmera, RTSP, Wi-Fi, NAS, temperatura ou operação contínua. O ensaio com webcam confirma somente as condições observadas durante aquela execução local.
+
 Descrição das variáveis obrigatórias e limites: [`docs/configuration.md`](docs/configuration.md). Desenho e limitações: [`docs/architecture.md`](docs/architecture.md).

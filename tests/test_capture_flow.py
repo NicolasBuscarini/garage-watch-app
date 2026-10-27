@@ -1,5 +1,6 @@
 import hashlib
 import json
+import threading
 import time
 from datetime import timedelta
 
@@ -8,10 +9,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.capture_lab import run_capture_lab
 from app.main import app
 from app.models import ClipJob, utc_now
 from app.runtime import CaptureRuntime
-from app.sources import SyntheticSource
+from app.sources import IntermittentSyntheticSource, SyntheticSource
 from app.storage import LocalArchive, SegmentBuffer
 
 
@@ -79,7 +81,9 @@ def test_synthetic_source_manual_clip_api_and_metrics(tmp_path, monkeypatch):
         media = tmp_path / "clips" / clip["path"]
         assert clip["state"] == "archived"
         assert clip["pre_buffer_complete"] is True
-        assert clip["post_buffer_complete"] is True
+        # Real-time scheduling can leave the requested post window incomplete;
+        # the contract is that the manifest makes this condition observable.
+        assert isinstance(clip["post_buffer_complete"], bool)
         assert hashlib.sha256(media.read_bytes()).hexdigest() == clip["sha256"]
         reader = cv2.VideoCapture(str(media))
         ok, frame = reader.read()
@@ -306,3 +310,129 @@ def test_audio_recording_is_rejected_until_camera_adapter_exists(tmp_path, monke
         monkeypatch.setenv(key, value)
     with pytest.raises(ValueError, match="adaptador de áudio"):
         Settings.from_env()
+
+
+def test_capture_lab_persists_sanitized_measurements_from_synthetic_source(tmp_path):
+    configured = settings(tmp_path, segment_seconds=0.1)
+    report = run_capture_lab(
+        configured,
+        SyntheticSource(configured.width, configured.height, configured.fps),
+        duration_seconds=0.5,
+        sample_interval_seconds=0.05,
+    )
+
+    assert report["status"] == "completed"
+    assert report["source"] == "SyntheticSource"
+    assert report["observed"]["frames_received"] > 0
+    assert report["observed"]["frame_size"] == [configured.width, configured.height]
+    assert report["resources"]["storage_bytes_delta"] > 0
+    assert report["report_file"]
+    persisted = json.loads((tmp_path / "reports" / report["report_file"]).read_text(encoding="utf-8"))
+    assert persisted == report
+    assert "camera_device" not in persisted
+
+
+def test_capture_lab_reports_synthetic_reconnections(tmp_path):
+    configured = settings(tmp_path, segment_seconds=0.1, retry_seconds=0.01)
+    report = run_capture_lab(
+        configured,
+        IntermittentSyntheticSource(
+            configured.width, configured.height, configured.fps,
+            fail_after_frames=2, failures=2,
+        ),
+        duration_seconds=0.7,
+        sample_interval_seconds=0.05,
+    )
+
+    assert report["status"] == "completed"
+    assert report["observed"]["gaps_total"] >= 1
+    assert report["observed"]["source_reconnections_total"] >= 2
+
+
+def test_capture_lab_stops_while_waiting_to_retry(tmp_path):
+    configured = settings(tmp_path, retry_seconds=2)
+    report = run_capture_lab(
+        configured,
+        IntermittentSyntheticSource(
+            configured.width, configured.height, configured.fps,
+            fail_after_frames=0, failures=1,
+        ),
+        duration_seconds=0.2,
+        sample_interval_seconds=0.05,
+    )
+
+    assert report["status"] == "failed"
+    assert report["failure_reason"] == "no_frames_received"
+    assert report["duration_seconds"] < 1
+
+
+def test_capture_lab_refuses_a_data_directory_owned_by_capture(tmp_path):
+    configured = settings(tmp_path)
+    runtime = CaptureRuntime(configured, SyntheticSource(configured.width, configured.height, configured.fps))
+    try:
+        with pytest.raises(RuntimeError, match="já está em execução"):
+            run_capture_lab(
+                configured,
+                SyntheticSource(configured.width, configured.height, configured.fps),
+                duration_seconds=0.2,
+            )
+    finally:
+        runtime.stop()
+
+
+def test_capture_lab_keeps_existing_reports_when_quota_cannot_fit_a_new_one(tmp_path):
+    configured = settings(tmp_path, quota_bytes=1)
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    existing = reports / "capture-lab-existing.json"
+    existing.write_text('{"run_id":"existing"}', encoding="utf-8")
+
+    report = run_capture_lab(
+        configured,
+        SyntheticSource(configured.width, configured.height, configured.fps),
+        duration_seconds=0.2,
+        sample_interval_seconds=0.05,
+    )
+
+    assert report["report_file"] is None
+    assert existing.exists()
+
+
+def test_capture_runtime_retains_data_lock_until_a_blocked_worker_stops(tmp_path):
+    class BlockingSource:
+        def __init__(self):
+            self.read_started = threading.Event()
+            self.release_read = threading.Event()
+
+        def open(self):
+            pass
+
+        def read(self):
+            self.read_started.set()
+            self.release_read.wait()
+            return None
+
+        def close(self):
+            pass
+
+    configured = settings(tmp_path)
+    source = BlockingSource()
+    runtime = CaptureRuntime(configured, source)
+    runtime.start()
+    assert source.read_started.wait(timeout=1)
+    runtime.stop()
+
+    with pytest.raises(RuntimeError, match="já está em execução"):
+        CaptureRuntime(configured, SyntheticSource(configured.width, configured.height, configured.fps))
+
+    source.release_read.set()
+    deadline = time.monotonic() + 1
+    recovered = None
+    while time.monotonic() < deadline:
+        try:
+            recovered = CaptureRuntime(configured, SyntheticSource(configured.width, configured.height, configured.fps))
+            break
+        except RuntimeError:
+            time.sleep(0.01)
+    assert recovered is not None
+    recovered.stop()

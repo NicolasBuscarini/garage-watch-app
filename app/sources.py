@@ -65,3 +65,20 @@ class SyntheticSource:
 
     def close(self) -> None:
         self.opened = False
+
+
+class IntermittentSyntheticSource(SyntheticSource):
+    """Fonte contratual que interrompe leituras para exercitar reconexão local."""
+
+    def __init__(self, width: int = 160, height: int = 120, fps: float = 10,
+                 fail_after_frames: int = 0, failures: int = 0):
+        super().__init__(width, height, fps)
+        self.fail_after_frames = fail_after_frames
+        self.failures_remaining = failures
+
+    def read(self) -> Frame | None:
+        if self.failures_remaining and self.index >= self.fail_after_frames:
+            self.failures_remaining -= 1
+            self.index += 1
+            return None
+        return super().read()

@@ -23,6 +23,8 @@ Toda configuração do serviço é injetada por variáveis de ambiente. `.env.ex
 
 Não use endereços RTSP ou credenciais nesta versão: o adaptador RTSP ainda não existe.
 
+`python -m app.capture_lab` usa estas mesmas variáveis e aceita somente parâmetros de execução não persistentes: `--duration-seconds`, `--source synthetic|camera` e, apenas para fonte sintética, `--synthetic-fail-after-frames`/`--synthetic-failures`. O laboratório preserva no máximo 20 relatórios JSON em `HOST_DATA_DIR/reports`; o relatório não contém caminho do dispositivo, URL RTSP ou credenciais e não é persistido se exceder a cota local.
+
 O expurgo ocorre ao finalizar/criar segmentos e na inicialização. Segmentos legados válidos acima da retenção são removidos, temporários e órfãos são tratados na recuperação, e segmentos que intersectam jobs `collecting` permanecem até a montagem ou falha do job. Reduzir a retenção também reduz o pré-evento disponível antes de um novo pedido de clipe.
 
 Os segmentos AVI/MJPEG atuais não carregam áudio. O host observado expõe apenas o microfone analógico do notebook, que permanece deliberadamente fora do container para não gravar som ambiente. Quando houver câmera com microfone, a captura exigirá adaptador de áudio, dispositivo/permissões explícitos, mux de mídia, limites de disco e testes de sincronização antes de `RECORD_AUDIO=true` ser suportado.
