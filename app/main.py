@@ -4,14 +4,14 @@ from fastapi.responses import PlainTextResponse
 
 from app.config import Settings
 from app.runtime import CaptureRuntime
-from app.sources import OpenCVCameraSource
+from app.sources import create_video_source
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = Settings.from_env()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
-    source = OpenCVCameraSource(settings.camera_device, settings.width, settings.height, settings.fps)
+    source = create_video_source(settings)
     runtime = CaptureRuntime(settings, source)
     app.state.runtime = runtime
     runtime.start()

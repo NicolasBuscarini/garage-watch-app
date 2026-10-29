@@ -1,0 +1,4 @@
+services:
+  capture:
+    # Docker Compose 2.24+: limpa a lista de dispositivos herdada do compose.yaml.
+    devices: !reset []

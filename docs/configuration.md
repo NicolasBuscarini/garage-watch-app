@@ -2,13 +2,17 @@
 
 Toda configuração do serviço é injetada por variáveis de ambiente. `.env.example` é um exemplo sem segredos; copie-o para `.env` e ajuste localmente. Compose falha se faltar uma variável obrigatória.
 
+Para o perfil de desenvolvimento sem dispositivo, combine `compose.yaml` com `compose.simulated.yaml`; a sobreposição limpa os dispositivos herdados e permite usar `SyntheticSource` sem webcam. Direcione `HOST_DATA_DIR` para armazenamento descartável separado dos dados do protótipo. O override requer Docker Compose 2.24 ou superior (`!reset`); não habilita RTSP, NAS ou qualquer capacidade de hardware.
+
 | Variável | Finalidade |
 |---|---|
 | `APP_PORT` | Porta do host, vinculada apenas a `127.0.0.1`; o serviço dentro do container escuta em 8080 |
 | `APP_UID`, `APP_GID` | Usuário/grupo do host usados pelo processo no container para acessar a pasta persistente |
 | `VIDEO_GID` | Grupo com permissão de leitura do dispositivo da webcam no host |
 | `HOST_DATA_DIR` | Pasta no SSD do host montada como `/data` no container |
-| `CAMERA_DEVICE_PATH` | Dispositivo local de vídeo, por exemplo `/dev/video0`; confirmar acesso/permissão no próprio host |
+| `CAMERA_SOURCE` | `webcam` por padrão; `rtsp` somente no perfil experimental integrado |
+| `CAMERA_DEVICE_PATH` | Dispositivo local de vídeo para `CAMERA_SOURCE=webcam`, por exemplo `/dev/video0` |
+| `CAMERA_RTSP_URL` | URI local sem credenciais/query/fragmento, somente para o perfil integrado, por exemplo `rtsp://neolink:8554/garage/mainStream`; não usar URL da câmera diretamente |
 | `CAMERA_ID` | Identificador estável da câmera no armazenamento e métricas |
 | `RECORD_AUDIO` | `false` mantém captura somente de vídeo. `true` é recusado até existir adaptador para o microfone da câmera; não usar o microfone do notebook como substituto |
 | `FRAME_WIDTH`, `FRAME_HEIGHT`, `FRAME_RATE` | Formato solicitado ao adaptador OpenCV; dimensões aceitas até 4096×2160 e 1–60 fps; o dispositivo pode negociar valores diferentes |
@@ -21,7 +25,7 @@ Toda configuração do serviço é injetada por variáveis de ambiente. `.env.ex
 | `MAX_CLIP_BYTES` | Limite do arquivo temporário produzido para um único clipe; deve ser menor ou igual à cota total |
 | `CAPTURE_RETRY_SECONDS` | Intervalo de retry (até 60 s) após falha de abertura/leitura da webcam |
 
-Não use endereços RTSP ou credenciais nesta versão: o adaptador RTSP ainda não existe.
+No modo webcam, não configure RTSP. O perfil `capture-rtsp` é experimental, usa OpenCV/FFmpeg por TCP e timeout de abertura/leitura de 5 s; requer a rede Docker externa interna `garage-watch-rtsp-lab` e o serviço Neolink anexado. Ele não homologa câmeras RTSP arbitrárias. Nunca coloque credenciais na URI; credenciais da E1 ficam exclusivamente no TOML ignorado do Neolink.
 
 `python -m app.capture_lab` usa estas mesmas variáveis e aceita somente parâmetros de execução não persistentes: `--duration-seconds`, `--source synthetic|camera` e, apenas para fonte sintética, `--synthetic-fail-after-frames`/`--synthetic-failures`. O laboratório preserva no máximo 20 relatórios JSON em `HOST_DATA_DIR/reports`; o relatório não contém caminho do dispositivo, URL RTSP ou credenciais e não é persistido se exceder a cota local.
 

@@ -14,7 +14,7 @@ import psutil
 from app.config import Settings
 from app.models import iso_utc, utc_now
 from app.runtime import CaptureRuntime
-from app.sources import IntermittentSyntheticSource, OpenCVCameraSource, VideoSource
+from app.sources import IntermittentSyntheticSource, VideoSource, create_video_source
 from app.storage import atomic_json
 
 
@@ -134,7 +134,7 @@ def run_capture_lab(settings: Settings, source: VideoSource, duration_seconds: f
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Executa ensaio local limitado de captura")
     parser.add_argument("--duration-seconds", type=float, required=True)
-    parser.add_argument("--source", choices=("synthetic", "camera"), default="synthetic")
+    parser.add_argument("--source", choices=("synthetic", "camera", "rtsp"), default="synthetic")
     parser.add_argument("--synthetic-fail-after-frames", type=int, default=0)
     parser.add_argument("--synthetic-failures", type=int, default=0)
     args = parser.parse_args(argv)
@@ -142,8 +142,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("falhas sintéticas devem ser zero ou positivas")
 
     settings = Settings.from_env()
-    if args.source == "camera":
-        source: VideoSource = OpenCVCameraSource(settings.camera_device, settings.width, settings.height, settings.fps)
+    if args.source in {"camera", "rtsp"}:
+        expected_source = "webcam" if args.source == "camera" else "rtsp"
+        if settings.camera_source != expected_source:
+            parser.error(f"--source {args.source} requer CAMERA_SOURCE={expected_source}")
+        source: VideoSource = create_video_source(settings)
     else:
         source = IntermittentSyntheticSource(
             settings.width, settings.height, settings.fps,

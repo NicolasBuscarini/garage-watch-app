@@ -1,10 +1,14 @@
 from typing import Protocol
 import time
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 
 from app.models import Frame, utc_now
+
+if TYPE_CHECKING:
+    from app.config import Settings
 
 
 class VideoSource(Protocol):
@@ -34,12 +38,57 @@ class OpenCVCameraSource:
         if self.capture is None:
             return None
         ok, image = self.capture.read()
-        return Frame(image, utc_now()) if ok and image is not None else None
+        if not ok or image is None:
+            return None
+        if image.shape[1] != self.width or image.shape[0] != self.height:
+            image = cv2.resize(image, (self.width, self.height), interpolation=cv2.INTER_AREA)
+        return Frame(image, utc_now())
 
     def close(self) -> None:
         if self.capture is not None:
             self.capture.release()
             self.capture = None
+
+
+class OpenCVRtspSource:
+    """Adaptador RTSP de laboratório; não registra nem inclui a URI em erros."""
+
+    def __init__(self, url: str, width: int, height: int, fps: float, timeout_ms: int = 5000):
+        self.url, self.width, self.height, self.fps = url, width, height, fps
+        self.timeout_ms = timeout_ms
+        self.capture: cv2.VideoCapture | None = None
+
+    def open(self) -> None:
+        capture = cv2.VideoCapture()
+        options = [
+            cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, self.timeout_ms,
+            cv2.CAP_PROP_READ_TIMEOUT_MSEC, self.timeout_ms,
+        ]
+        if not capture.open(self.url, cv2.CAP_FFMPEG, options) or not capture.isOpened():
+            capture.release()
+            raise RuntimeError("não foi possível abrir a fonte RTSP configurada")
+        self.capture = capture
+
+    def read(self) -> Frame | None:
+        if self.capture is None:
+            return None
+        ok, image = self.capture.read()
+        if not ok or image is None:
+            return None
+        if image.shape[1] != self.width or image.shape[0] != self.height:
+            image = cv2.resize(image, (self.width, self.height), interpolation=cv2.INTER_AREA)
+        return Frame(image, utc_now())
+
+    def close(self) -> None:
+        if self.capture is not None:
+            self.capture.release()
+            self.capture = None
+
+
+def create_video_source(settings: "Settings") -> VideoSource:
+    if settings.camera_source == "rtsp":
+        return OpenCVRtspSource(settings.camera_rtsp_url, settings.width, settings.height, settings.fps)
+    return OpenCVCameraSource(settings.camera_device, settings.width, settings.height, settings.fps)
 
 
 class SyntheticSource:

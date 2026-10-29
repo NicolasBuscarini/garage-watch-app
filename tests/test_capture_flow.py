@@ -13,7 +13,7 @@ from app.capture_lab import run_capture_lab
 from app.main import app
 from app.models import ClipJob, utc_now
 from app.runtime import CaptureRuntime
-from app.sources import IntermittentSyntheticSource, SyntheticSource
+from app.sources import IntermittentSyntheticSource, OpenCVRtspSource, SyntheticSource, create_video_source
 from app.storage import LocalArchive, SegmentBuffer
 
 
@@ -21,6 +21,8 @@ def settings(tmp_path, **overrides):
     values = dict(
         data_dir=tmp_path,
         camera_device="synthetic",
+        camera_source="webcam",
+        camera_rtsp_url=None,
         camera_id="test-camera",
         width=160,
         height=120,
@@ -44,8 +46,8 @@ def test_synthetic_source_manual_clip_api_and_metrics(tmp_path, monkeypatch):
     configured = settings(tmp_path)
     monkeypatch.setattr(Settings, "from_env", classmethod(lambda cls: configured))
     monkeypatch.setattr(
-        "app.main.OpenCVCameraSource",
-        lambda *args: SyntheticSource(configured.width, configured.height, configured.fps),
+        "app.main.create_video_source",
+        lambda _: SyntheticSource(configured.width, configured.height, configured.fps),
     )
 
     with TestClient(app) as client:
@@ -436,3 +438,88 @@ def test_capture_runtime_retains_data_lock_until_a_blocked_worker_stops(tmp_path
             time.sleep(0.01)
     assert recovered is not None
     recovered.stop()
+
+
+def test_rtsp_source_uses_ffmpeg_transport_and_bounded_timeouts(monkeypatch, tmp_path):
+    class FakeCapture:
+        def __init__(self):
+            self.open_args = None
+            self.released = False
+
+        def open(self, *args):
+            self.open_args = args
+            return True
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            import numpy as np
+            return True, np.zeros((240, 320, 3), dtype=np.uint8)
+
+        def release(self):
+            self.released = True
+
+    capture = FakeCapture()
+    monkeypatch.setattr(cv2, "VideoCapture", lambda: capture)
+    configured = settings(tmp_path, camera_source="rtsp", camera_device="",
+                          camera_rtsp_url="rtsp://neolink:8554/garage/mainStream")
+    source = create_video_source(configured)
+    assert isinstance(source, OpenCVRtspSource)
+
+    source.open()
+    frame = source.read()
+    source.close()
+
+    assert capture.open_args[0] == "rtsp://neolink:8554/garage/mainStream"
+    assert capture.open_args[1] == cv2.CAP_FFMPEG
+    assert capture.open_args[2] == [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000,
+                                    cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000]
+    assert frame.image.shape == (120, 160, 3)
+    assert capture.released
+
+
+def test_rtsp_source_failure_does_not_disclose_url(monkeypatch, tmp_path):
+    class UnavailableCapture:
+        def open(self, *_):
+            return False
+
+        def isOpened(self):
+            return False
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr(cv2, "VideoCapture", UnavailableCapture)
+    url = "rtsp://neolink:8554/garage/mainStream?token=secret"
+    source = OpenCVRtspSource(url, 160, 120, 10)
+    with pytest.raises(RuntimeError) as error:
+        source.open()
+    assert "secret" not in str(error.value)
+
+
+def test_rtsp_configuration_rejects_embedded_credentials(monkeypatch):
+    values = {
+        "HOST_DATA_DIR": "/tmp/capture-test",
+        "CAMERA_SOURCE": "rtsp",
+        "CAMERA_RTSP_URL": "rtsp://operator:secret@neolink:8554/garage/mainStream",
+        "CAMERA_ID": "test-camera",
+        "FRAME_WIDTH": "640",
+        "FRAME_HEIGHT": "360",
+        "FRAME_RATE": "15",
+        "SEGMENT_SECONDS": "2",
+        "SEGMENT_RETENTION_SECONDS": "15",
+        "PRE_EVENT_SECONDS": "0",
+        "POST_EVENT_SECONDS": "1",
+        "STORAGE_QUOTA_BYTES": "20000000",
+        "MIN_FREE_BYTES": "0",
+        "CAPTURE_RETRY_SECONDS": "2",
+        "MAX_PENDING_CLIPS": "5",
+        "MAX_CLIP_BYTES": "10000000",
+        "RECORD_AUDIO": "false",
+    }
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
+    with pytest.raises(ValueError) as error:
+        Settings.from_env()
+    assert "secret" not in str(error.value)

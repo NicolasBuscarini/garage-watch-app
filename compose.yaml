@@ -6,7 +6,9 @@ services:
     user: "${APP_UID:?set APP_UID}:${APP_GID:?set APP_GID}"
     environment:
       HOST_DATA_DIR: /data
+      CAMERA_SOURCE: "${CAMERA_SOURCE:-webcam}"
       CAMERA_DEVICE_PATH: "${CAMERA_DEVICE_PATH:?set CAMERA_DEVICE_PATH}"
+      CAMERA_RTSP_URL: "${CAMERA_RTSP_URL:-}"
       CAMERA_ID: "${CAMERA_ID:?set CAMERA_ID}"
       FRAME_WIDTH: "${FRAME_WIDTH:?set FRAME_WIDTH}"
       FRAME_HEIGHT: "${FRAME_HEIGHT:?set FRAME_HEIGHT}"
@@ -39,6 +41,25 @@ services:
     networks:
       - capture_local
 
+  capture-rtsp:
+    extends:
+      service: capture
+    profiles: [rtsp-integration]
+    devices: !reset []
+    group_add: !reset []
+    ports: !override
+      - "127.0.0.1:${RTSP_APP_PORT:-8083}:8080"
+    environment:
+      CAMERA_SOURCE: rtsp
+      CAMERA_RTSP_URL: "${CAMERA_RTSP_URL:-rtsp://neolink:8554/garage/mainStream}"
+      OPENCV_FFMPEG_CAPTURE_OPTIONS: rtsp_transport;tcp
+    networks:
+      - capture_local
+      - rtsp_lab
+
 networks:
   capture_local:
     driver: bridge
+  rtsp_lab:
+    name: garage-watch-rtsp-lab
+    external: true

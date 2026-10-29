@@ -8,6 +8,8 @@ from pathlib import Path
 class Settings:
     data_dir: Path
     camera_device: str
+    camera_source: str
+    camera_rtsp_url: str | None
     camera_id: str
     width: int
     height: int
@@ -39,7 +41,9 @@ class Settings:
 
         settings = cls(
             data_dir=Path(required("HOST_DATA_DIR")),
-            camera_device=required("CAMERA_DEVICE_PATH"),
+            camera_device=os.environ.get("CAMERA_DEVICE_PATH", ""),
+            camera_source=os.environ.get("CAMERA_SOURCE", "webcam").strip().lower(),
+            camera_rtsp_url=os.environ.get("CAMERA_RTSP_URL"),
             camera_id=required("CAMERA_ID"),
             width=int(required("FRAME_WIDTH")),
             height=int(required("FRAME_HEIGHT")),
@@ -67,8 +71,21 @@ class Settings:
                 settings.retry_seconds > 60 or
                 settings.max_pending_clips < 1 or settings.max_pending_clips > 100 or
                 settings.max_clip_bytes < 1 or settings.max_clip_bytes > settings.quota_bytes or
-                not settings.camera_id.strip()):
+                not settings.camera_id.strip() or settings.camera_source not in {"webcam", "rtsp"}):
             raise ValueError("configuração de captura inválida")
+        if settings.camera_source == "webcam" and (not settings.camera_device or settings.camera_rtsp_url):
+            raise ValueError("webcam requer CAMERA_DEVICE_PATH e não aceita CAMERA_RTSP_URL")
+        if settings.camera_source == "rtsp":
+            from urllib.parse import urlsplit
+
+            try:
+                uri = urlsplit(settings.camera_rtsp_url or "")
+                valid_rtsp = (uri.scheme == "rtsp" and bool(uri.hostname) and uri.port is not None
+                              and uri.username is None and uri.password is None and not uri.query and not uri.fragment)
+            except ValueError:
+                valid_rtsp = False
+            if not valid_rtsp:
+                raise ValueError("CAMERA_RTSP_URL deve ser RTSP local válida, sem credenciais, query ou fragmento")
         if settings.pre_event_seconds + math.ceil(settings.segment_seconds) > settings.segment_retention_seconds:
             raise ValueError("PRE_EVENT_SECONDS mais SEGMENT_SECONDS deve caber em SEGMENT_RETENTION_SECONDS")
         if settings.record_audio:
