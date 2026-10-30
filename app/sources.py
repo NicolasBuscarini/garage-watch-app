@@ -86,6 +86,8 @@ class OpenCVRtspSource:
 
 
 def create_video_source(settings: "Settings") -> VideoSource:
+    if settings.camera_source == "synthetic":
+        return SyntheticSource(settings.width, settings.height, settings.fps)
     if settings.camera_source == "rtsp":
         return OpenCVRtspSource(settings.camera_rtsp_url, settings.width, settings.height, settings.fps)
     return OpenCVCameraSource(settings.camera_device, settings.width, settings.height, settings.fps)

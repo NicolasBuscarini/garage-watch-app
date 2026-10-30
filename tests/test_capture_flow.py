@@ -300,6 +300,30 @@ def test_invalid_configuration_is_rejected(tmp_path, monkeypatch):
         Settings.from_env()
 
 
+def test_service_configuration_selects_synthetic_source_without_opening_device(tmp_path, monkeypatch):
+    for key, value in {
+        "HOST_DATA_DIR": str(tmp_path), "CAMERA_DEVICE_PATH": "/dev/null", "CAMERA_SOURCE": "synthetic",
+        "CAMERA_RTSP_URL": "rtsp://neolink:8554/garage/mainStream",
+        "CAMERA_ID": "garage", "FRAME_WIDTH": "160", "FRAME_HEIGHT": "120", "FRAME_RATE": "10",
+        "SEGMENT_SECONDS": "2", "SEGMENT_RETENTION_SECONDS": "30", "PRE_EVENT_SECONDS": "10",
+        "POST_EVENT_SECONDS": "20", "STORAGE_QUOTA_BYTES": "1000000", "MIN_FREE_BYTES": "1000",
+        "CAPTURE_RETRY_SECONDS": "1", "MAX_PENDING_CLIPS": "5", "MAX_CLIP_BYTES": "100000",
+        "RECORD_AUDIO": "false",
+    }.items():
+        monkeypatch.setenv(key, value)
+
+    configured = Settings.from_env()
+    source = create_video_source(configured)
+    assert isinstance(source, SyntheticSource)
+    source.open()
+    try:
+        frame = source.read()
+        assert frame is not None
+        assert frame.image.shape == (120, 160, 3)
+    finally:
+        source.close()
+
+
 def test_audio_recording_is_rejected_until_camera_adapter_exists(tmp_path, monkeypatch):
     for key, value in {
         "HOST_DATA_DIR": str(tmp_path), "CAMERA_DEVICE_PATH": "/dev/video0", "CAMERA_ID": "garage",

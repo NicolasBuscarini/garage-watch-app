@@ -20,7 +20,7 @@ O escopo e os critérios compartilhados estão em `../../docs/governanca/10_BACK
 3. Execute `docker compose up --build`.
 4. A API fica disponível somente em `http://127.0.0.1:${APP_PORT}`. `/health/live`, `/health/ready`, `/api/v1/status`, `/api/v1/clips`, `POST /api/v1/clips` e `/metrics` permitem verificar a captura e solicitar um clipe.
 
-O serviço exige uma webcam acessível pelo container para ficar pronto. Testes automatizados usam `SyntheticSource` e não abrem o dispositivo. Para executar os testes sem câmera: `docker compose --env-file .env.example build`, depois `docker run --rm --user 0 -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/app -v "$PWD:/app:ro" -w /app --entrypoint python garage-watch-capture -m pytest -p no:cacheprovider`.
+O serviço aceita `CAMERA_SOURCE=webcam` (padrão), `synthetic` (padrão visual local, sem dispositivo) ou `rtsp` somente no perfil opt-in `rtsp-integration`. `compose.simulated.yaml` remove o mapeamento de dispositivo para executar o perfil sintético com segurança. Testes automatizados também usam `SyntheticSource`. Para executar os testes sem câmera: `docker compose --env-file .env.example build`, depois `docker run --rm --user 0 -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/app -v "$PWD:/app:ro" -w /app --entrypoint python garage-watch-capture -m pytest -p no:cacheprovider`.
 
 `POST /api/v1/clips` cria job durável e responde imediatamente; o clipe aparece após a janela pós-evento configurada. Clipes/segmentos são AVI/MJPEG neste experimento. Segmentos legados válidos são expurgados na inicialização conforme `SEGMENT_RETENTION_SECONDS`, exceto os protegidos por jobs pendentes. O endpoint local ainda não tem autenticação e não deve ser publicado na LAN ou internet.
 

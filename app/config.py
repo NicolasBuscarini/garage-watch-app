@@ -71,7 +71,7 @@ class Settings:
                 settings.retry_seconds > 60 or
                 settings.max_pending_clips < 1 or settings.max_pending_clips > 100 or
                 settings.max_clip_bytes < 1 or settings.max_clip_bytes > settings.quota_bytes or
-                not settings.camera_id.strip() or settings.camera_source not in {"webcam", "rtsp"}):
+                not settings.camera_id.strip() or settings.camera_source not in {"webcam", "rtsp", "synthetic"}):
             raise ValueError("configuração de captura inválida")
         if settings.camera_source == "webcam" and (not settings.camera_device or settings.camera_rtsp_url):
             raise ValueError("webcam requer CAMERA_DEVICE_PATH e não aceita CAMERA_RTSP_URL")
